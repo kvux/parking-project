@@ -3,11 +3,11 @@ import os
 
 def get_connection():
     """Create and return a database connection"""
-    # For now, we'll create a connection without database first
+    #databse connection
     connection = mysql.connector.connect(
         host="localhost",
         user="root",
-        password="root"  # Your MySQL password
+        password="root"  # sql pw
     )
     return connection
 
@@ -27,7 +27,7 @@ def create_database():
 
 def create_tables():
     """Create the basic tables"""
-    # Connect to the specific database
+    #database
     conn = mysql.connector.connect(
         host="localhost",
         user="root",
@@ -36,7 +36,7 @@ def create_tables():
     )
     cursor = conn.cursor()
     
-    # Create parking_spots table
+    #parking spot create
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS parking_spots (
             spot_id INT PRIMARY KEY,
@@ -44,14 +44,14 @@ def create_tables():
         )
     """)
     
-    # Insert default spots (1-4) if they don't exist
+    # insert spot
     for i in range(1, 5):
         cursor.execute("""
             INSERT IGNORE INTO parking_spots (spot_id, status) 
             VALUES (%s, 'free')
         """, (i,))
     
-    # Create records table for entry/exit
+    # make record
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS parking_records (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -65,7 +65,7 @@ def create_tables():
     conn.commit()
     cursor.close()
     conn.close()
-    print("✅ Tables created successfully")
+    print("✅ Table created")
 
 if __name__ == "__main__":
     create_database()
