@@ -83,7 +83,15 @@ def record_entry():
 
     if not car_plate or not spot_id:
         return error_response("car_plate and spot_id are required")
+cursor.execute("""
+    SELECT * FROM parking_records 
+    WHERE car_plate = %s AND exit_time IS NULL
+""", (car_plate,))
 
+active = cursor.fetchone()
+
+if active:
+    return error_response("Car is already parked")
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
