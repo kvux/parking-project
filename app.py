@@ -8,35 +8,35 @@ import os
 import re
 import logging
 
-# ==================== CONFIGURATION & INITIALIZATION ====================
+#configuration
 app = Flask(__name__)
 
 # Enable CORS
 CORS(app)
 
-# Rate limiting
+# rate limit
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"]
 )
 
-# Logging setup
+# logging setuup
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Database config - USING ENVIRONMENT VARIABLES (secure)
+# db config using env
 db_config = {
     'host': os.getenv('DB_HOST', 'localhost'),
     'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', 'root'),  # In production, always use env var
+    'password': os.getenv('DB_PASSWORD', 'root'),  
     'database': os.getenv('DB_NAME', 'parking_db')
 }
 
-# ==================== DATABASE FUNCTIONS ====================
+# db func
 def get_db_connection():
     """Create and return a database connection"""
     return mysql.connector.connect(**db_config)
@@ -47,7 +47,7 @@ def init_db():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Create parking_spots table
+        # create parking spot tale
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS parking_spots (
                 spot_id INT PRIMARY KEY,
@@ -89,7 +89,7 @@ def init_db():
         if 'conn' in locals():
             conn.close()
 
-# ==================== HELPER FUNCTIONS ====================
+#helper function
 def error_response(message, code=400):
     """Return standardized error response"""
     return jsonify({"error": message}), code
@@ -101,7 +101,7 @@ def validate_car_plate(car_plate):
     # Allow letters, numbers, hyphens, and spaces (adjust regex as needed)
     return bool(re.match(r'^[A-Z0-9\s-]+$', car_plate.strip().upper()))
 
-# ==================== API ENDPOINTS ====================
+#spi end points
 
 @app.route('/')
 def home():
@@ -164,7 +164,7 @@ def get_available_spots():
         cursor.execute("SELECT COUNT(*) FROM parking_spots WHERE status = 'free'")
         count = cursor.fetchone()[0]
         
-        # Also get total spots for percentage
+        # get total spot
         cursor.execute("SELECT COUNT(*) FROM parking_spots")
         total = cursor.fetchone()[0]
         
@@ -187,7 +187,7 @@ def get_available_spots():
             conn.close()
 
 @app.route('/api/entry', methods=['POST'])
-@limiter.limit("10 per minute")  # Rate limiting for entry endpoint
+@limiter.limit("10 per minute")  # rate limit for entry point
 def record_entry():
     """Record a car entering the parking lot"""
     data = request.get_json()
