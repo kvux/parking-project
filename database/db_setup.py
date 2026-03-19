@@ -1,0 +1,73 @@
+import mysql.connector
+import os
+
+def get_connection():
+    """Create and return a database connection"""
+    # For now, we'll create a connection without database first
+    connection = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="root"  # Your MySQL password
+    )
+    return connection
+
+def create_database():
+    """Create the parking database if it doesn't exist"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("CREATE DATABASE IF NOT EXISTS parking_db")
+        print("✅ Database 'parking_db' created or already exists")
+    except mysql.connector.Error as err:
+        print(f"❌ Error: {err}")
+    finally:
+        cursor.close()
+        conn.close()
+
+def create_tables():
+    """Create the basic tables"""
+    # Connect to the specific database
+    conn = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="root",
+        database="parking_db"
+    )
+    cursor = conn.cursor()
+    
+    # Create parking_spots table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS parking_spots (
+            spot_id INT PRIMARY KEY,
+            status VARCHAR(20) DEFAULT 'free'
+        )
+    """)
+    
+    # Insert default spots (1-4) if they don't exist
+    for i in range(1, 5):
+        cursor.execute("""
+            INSERT IGNORE INTO parking_spots (spot_id, status) 
+            VALUES (%s, 'free')
+        """, (i,))
+    
+    # Create records table for entry/exit
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS parking_records (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            car_plate VARCHAR(20),
+            entry_time DATETIME,
+            exit_time DATETIME,
+          spot_id INT
+        )
+    """)
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("✅ Tables created successfully")
+
+if __name__ == "__main__":
+    create_database()
+    create_tables()
+EOF
