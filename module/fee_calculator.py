@@ -9,4 +9,18 @@ Calculate parking fee based on duration
 
 Args:
 entry_time: datetime object
-exit_time: dateime object (default to now)
+exit_time: dateime object (defaults to now)
+
+Returns:
+dict with fee details
+"""
+if exit_time is None;
+exit_time =datetime.now()
+
+#calculate how long
+duration= exit_time - entry_time
+total_seconds = duration.total_seconds ()
+hours_actual = total_seconds / 3600
+
+#round number
+billable_hours = math.ceil(hours_actual
