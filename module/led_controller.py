@@ -1,34 +1,40 @@
-import RPi.GPIO as GPIO
 import time
+try:
+    import RPi.GPIO as GPIO
+    IS_PI = True
+except ImportError:
+    IS_PI = False
 
 # Pin Definitions
-red_led_pin = 18  # GPIO pin for red LED
-green_led_pin = 23  # GPIO pin for green LED
+red_led_pin = 18
+green_led_pin = 23
 
-# Initialize GPIO
-GPIO.setmode(GPIO.BCM)  # Use Broadcom pin numbering
-GPIO.setup(red_led_pin, GPIO.OUT)
-GPIO.setup(green_led_pin, GPIO.OUT)
+# Initialize GPIO only if on Pi
+if IS_PI:
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(red_led_pin, GPIO.OUT)
+    GPIO.setup(green_led_pin, GPIO.OUT)
 
 # Function to control LEDs based on parking spot status
-
 def control_leds(is_occupied):
+    if not IS_PI:
+        return
     if is_occupied:
-        GPIO.output(red_led_pin, GPIO.HIGH)  # Turn on red LED
-        GPIO.output(green_led_pin, GPIO.LOW)  # Turn off green LED
+        GPIO.output(red_led_pin, GPIO.HIGH)
+        GPIO.output(green_led_pin, GPIO.LOW)
     else:
-        GPIO.output(red_led_pin, GPIO.LOW)  # Turn off red LED
-        GPIO.output(green_led_pin, GPIO.HIGH)  # Turn on green LED
+        GPIO.output(red_led_pin, GPIO.LOW)
+        GPIO.output(green_led_pin, GPIO.HIGH)
 
-# Example usage
-try:
-    while True:
-        # Simulating parking spot status (replace this with actual logic)
-        is_occupied = False  # Change to True or False based on your logic
-        control_leds(is_occupied)
-        time.sleep(1)  # Check every second
-
-except KeyboardInterrupt:
-    pass
-finally:
-    GPIO.cleanup()  # Clean up GPIO on exit
+# Only run the loop when this file is run directly
+if __name__ == "__main__":
+    try:
+        while True:
+            is_occupied = False
+            control_leds(is_occupied)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if IS_PI:
+            GPIO.cleanup()
