@@ -54,7 +54,8 @@ def init_db():
             CREATE TABLE IF NOT EXISTS parking_spots (
                 spot_id INT PRIMARY KEY,
                 status ENUM('free', 'occupied') DEFAULT 'free'
-        """)  
+            )
+         """)
         
         # Create parking_records table
         cursor.execute("""
