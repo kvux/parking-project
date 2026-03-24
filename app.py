@@ -7,6 +7,7 @@ from mysql.connector import Error
 import os
 import re
 import logging
+from datetime import datetime
 
 #configuration
 app = Flask(__name__)
@@ -21,7 +22,7 @@ limiter = Limiter(
     default_limits=["200 per day", "50 per hour"]
 )
 
-# logging setuup
+# logging setup
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -32,7 +33,7 @@ logger = logging.getLogger(__name__)
 db_config = {
     'host': os.getenv('DB_HOST', 'localhost'),
     'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', 'root'),  
+    'password': os.getenv('DB_PASSWORD', ''),  
     'database': os.getenv('DB_NAME', 'parking_db')
 }
 
@@ -47,13 +48,13 @@ def init_db():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # create parking spot tale
+        # create parking spot table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS parking_spots (
                 spot_id INT PRIMARY KEY,
                 status ENUM('free', 'occupied') DEFAULT 'free'
             )
-        """)
+        """
         
         # Create parking_records table
         cursor.execute("""
@@ -67,7 +68,7 @@ def init_db():
                 INDEX idx_car_plate (car_plate),
                 INDEX idx_active (exit_time)
             )
-        """)
+        """
         
         # Insert default parking spots if table is empty
         cursor.execute("SELECT COUNT(*) FROM parking_spots")
@@ -101,7 +102,7 @@ def validate_car_plate(car_plate):
     # Allow letters, numbers, hyphens, and spaces (adjust regex as needed)
     return bool(re.match(r'^[A-Z0-9\s-]+$', car_plate.strip().upper()))
 
-#spi end points
+#api end points
 
 @app.route('/')
 def home():
@@ -205,6 +206,12 @@ def record_entry():
     
     if not validate_car_plate(car_plate):
         return error_response("Invalid car plate format. Use letters, numbers, and hyphens only.")
+    
+    # Validate spot_id is an integer
+    try:
+        spot_id = int(spot_id)
+    except (ValueError, TypeError):
+        return error_response("spot_id must be an integer")
 
     try:
         conn = get_db_connection()
@@ -278,6 +285,12 @@ def record_exit():
     if not car_plate or not spot_id:
         return error_response("car_plate and spot_id are required")
 
+    # Validate spot_id is an integer
+    try:
+        spot_id = int(spot_id)
+    except (ValueError, TypeError):
+        return error_response("spot_id must be an integer")
+
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -310,9 +323,8 @@ def record_exit():
         conn.commit()
         
         # Calculate parking duration
-        from datetime import datetime
         entry_time = record['entry_time']
-        exit_time = datetime.now()
+        exit_time = datetime.utcnow()
         duration = exit_time - entry_time
         hours = round(duration.total_seconds() / 3600, 2)
         
