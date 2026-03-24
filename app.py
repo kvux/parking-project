@@ -54,7 +54,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS parking_spots (
                 spot_id INT PRIMARY KEY,
                 status ENUM('free', 'occupied') DEFAULT 'free'
-            )
+        """)  
         
         # Create parking_records table
         cursor.execute("""
@@ -68,7 +68,7 @@ def init_db():
                 INDEX idx_car_plate (car_plate),
                 INDEX idx_active (exit_time)
             )
-        """
+        """)  
         
         # Insert default parking spots if table is empty
         cursor.execute("SELECT COUNT(*) FROM parking_spots")
