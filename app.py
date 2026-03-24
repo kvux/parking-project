@@ -8,6 +8,7 @@ import os
 import re
 import logging
 from datetime import datetime
+from module.fee_calculator import calculate_fee
 
 #configuration
 app = Flask(__name__)
@@ -54,7 +55,6 @@ def init_db():
                 spot_id INT PRIMARY KEY,
                 status ENUM('free', 'occupied') DEFAULT 'free'
             )
-        """
         
         # Create parking_records table
         cursor.execute("""
@@ -379,7 +379,45 @@ def current_cars():
             cursor.close()
         if 'conn' in locals():
             conn.close()
+@app.route('/api/sensor/update', methods=['POST'])
+def sensor_update():
+    """Called by sensor.py when a spot's state changes."""
+    data = request.get_json()
+    if not data:
+        return error_response("Invalid JSON")
 
+    spot_id  = data.get('spot_id')
+    occupied = data.get('occupied')
+
+    if spot_id is None or occupied is None:
+        return error_response("spot_id and occupied are required")
+
+    try:
+        spot_id = int(spot_id)
+    except (ValueError, TypeError):
+        return error_response("spot_id must be an integer")
+
+    new_status = 'occupied' if occupied else 'free'
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE parking_spots SET status = %s WHERE spot_id = %s",
+            (new_status, spot_id)
+        )
+        if cursor.rowcount == 0:
+            return error_response("Spot not found", 404)
+        conn.commit()
+        logger.info(f"Sensor update: spot {spot_id} → {new_status}")
+        return jsonify({"spot_id": spot_id, "status": new_status}), 200
+    except Error as e:
+        logger.error(f"Sensor update error: {e}")
+        return error_response(str(e), 500)
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
+        
 @app.route('/api/history', methods=['GET'])
 def history():
     """Get parking history with pagination"""
