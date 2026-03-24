@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 PARKING_RATE_PER_HOUR = 10000
 MINIMUM_CHARGE_HOURS = 1
-GRACE_PERIOD_MINUTES = 15  # Free parking for first 15 minutes
+GRACE_PERIOD_MINUTES = 5  # Free parking for first 5 minutes
 
 def calculate_fee(entry_time, exit_time=None, discount_percent=0):
     """
