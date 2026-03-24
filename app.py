@@ -8,7 +8,6 @@ import os
 import re
 import logging
 from datetime import datetime
-from module.fee_calculator import calculate_fee
 
 #configuration
 app = Flask(__name__)
