@@ -271,15 +271,10 @@ def record_entry():
 
 @app.route('/api/exit', methods=['POST'])
 @limiter.limit("10 per minute")  # Rate limiting for exit endpoint
-cursor.execute("SELECT spot_id FROM parking_spots WHERE spot_id = %s", (spot_id,))
-if not cursor.fetchone():
-    return error_response("Spot not found", 404)
+def record_exit():
+    """Record a car exiting the parking lot"""
+    data = request.get_json()
 
-cursor.execute(
-    "UPDATE parking_spots SET status = %s WHERE spot_id = %s",
-    (new_status, spot_id)
-)
-conn.commit()
     if not data:
         return error_response("Invalid JSON input")
 
