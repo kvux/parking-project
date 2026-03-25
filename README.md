@@ -10,11 +10,15 @@ A backend API for managing parking spots, car entry/exit, and tracking parking h
 - Prevent duplicate parking
 - Track current parked cars
 - View parking history
+- Real-time sensor-driven spot updates *(new)*
+- Automatic LED indicators per spot *(new)*
 
 ## Tech Stack
 - Python (Flask)
 - MySQL
 - REST API
+- Raspberry Pi + HC-SR04 sensors *(new)*
+- Android app *(in development)*
 
 ## API Endpoints
 
@@ -37,6 +41,18 @@ POST /api/exit
   "car_plate": "ABC123",
   "spot_id": 1
 }
+### Get currently parked cars *(new)*
+GET /api/current
+
+### Get parking history *(new)*
+GET /api/history?page=1&per_page=20
+
+### Sensor update *(new)*
+POST /api/sensor/update
+{
+  "spot_id": 1,
+  "occupied": true
+}
 
 ## How to Run
 
@@ -44,4 +60,9 @@ POST /api/exit
 python -m venv venv
 venv\Scripts\activate
 pip install flask mysql-connector-python python-dotenv flask-cors flask-limiter
+
+### Sensor loop (Raspberry Pi only) *(new)*
+```bash
+python module/sensor.py
+```
 python app.py
