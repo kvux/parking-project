@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 db_config = {
     'host': os.getenv('DB_HOST', 'localhost'),
     'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', ''),  
+    'password': os.getenv('DB_PASSWORD', 'root'), 
     'database': os.getenv('DB_NAME', 'parking_db')
 }
 
