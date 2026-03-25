@@ -324,7 +324,7 @@ def record_exit():
         
         # Calculate parking duration
         entry_time = record['entry_time']
-        exit_time = datetime.utcnow()
+        exit_time = datetime.now()
         duration = exit_time - entry_time
         hours = round(duration.total_seconds() / 3600, 2)
         
