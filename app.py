@@ -188,7 +188,7 @@ def get_available_spots():
             conn.close()
 
 @app.route('/api/entry', methods=['POST'])
-@limiter.limit("10 per minute")  # rate limit for entry point
+@limiter.limit("10 per minute")
 def record_entry():
     """Record a car entering the parking lot"""
     data = request.get_json()
@@ -207,7 +207,6 @@ def record_entry():
     if not validate_car_plate(car_plate):
         return error_response("Invalid car plate format. Use letters, numbers, and hyphens only.")
     
-    # Validate spot_id is an integer
     try:
         spot_id = int(spot_id)
     except (ValueError, TypeError):
@@ -217,7 +216,6 @@ def record_entry():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Check if car already parked
         cursor.execute("""
             SELECT * FROM parking_records
             WHERE car_plate = %s AND exit_time IS NULL
@@ -228,7 +226,6 @@ def record_entry():
             logger.warning(f"Car {car_plate} attempted to park while already parked")
             return error_response("Car is already parked")
 
-        # Check if spot exists and is free
         cursor.execute("SELECT status FROM parking_spots WHERE spot_id = %s", (spot_id,))
         spot = cursor.fetchone()
 
@@ -238,13 +235,11 @@ def record_entry():
         if spot['status'] != 'free':
             return error_response("Spot already occupied")
 
-        # Insert record
         cursor.execute(
             "INSERT INTO parking_records (car_plate, entry_time, spot_id) VALUES (%s, NOW(), %s)",
             (car_plate, spot_id)
         )
 
-        # Update spot
         cursor.execute(
             "UPDATE parking_spots SET status = 'occupied' WHERE spot_id = %s",
             (spot_id,)
@@ -270,27 +265,20 @@ def record_entry():
             conn.close()
 
 @app.route('/api/exit', methods=['POST'])
-@limiter.limit("10 per minute")  # Rate limiting for exit endpoint
-cursor.execute("SELECT spot_id FROM parking_spots WHERE spot_id = %s", (spot_id,))
-if not cursor.fetchone():
-    return error_response("Spot not found", 404)
+@limiter.limit("10 per minute")
+def record_exit():
+    """Record a car exiting the parking lot"""
+    data = request.get_json()
 
-cursor.execute(
-    "UPDATE parking_spots SET status = %s WHERE spot_id = %s",
-    (new_status, spot_id)
-)
-conn.commit()
     if not data:
         return error_response("Invalid JSON input")
 
-    # Sanitize inputs
     car_plate = data.get('car_plate', '').strip().upper()
     spot_id = data.get('spot_id')
 
     if not car_plate or not spot_id:
         return error_response("car_plate and spot_id are required")
 
-    # Validate spot_id is an integer
     try:
         spot_id = int(spot_id)
     except (ValueError, TypeError):
@@ -300,7 +288,6 @@ conn.commit()
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Check active record
         cursor.execute("""
             SELECT * FROM parking_records
             WHERE car_plate = %s AND spot_id = %s AND exit_time IS NULL
@@ -312,14 +299,12 @@ conn.commit()
             logger.warning(f"Exit attempted for car {car_plate} with no active record")
             return error_response("No active parking record found")
 
-        # Update exit
         cursor.execute("""
             UPDATE parking_records
             SET exit_time = NOW()
             WHERE id = %s
         """, (record['id'],))
 
-        # Free spot
         cursor.execute(
             "UPDATE parking_spots SET status = 'free' WHERE spot_id = %s",
             (spot_id,)
@@ -327,7 +312,6 @@ conn.commit()
 
         conn.commit()
         
-        # Calculate parking duration
         entry_time = record['entry_time']
         exit_time = datetime.now()
         duration = exit_time - entry_time
@@ -384,6 +368,7 @@ def current_cars():
             cursor.close()
         if 'conn' in locals():
             conn.close()
+
 @app.route('/api/sensor/update', methods=['POST'])
 def sensor_update():
     """Called by sensor.py when a spot's state changes."""
@@ -407,12 +392,15 @@ def sensor_update():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        cursor.execute("SELECT spot_id FROM parking_spots WHERE spot_id = %s", (spot_id,))
+        if not cursor.fetchone():
+            return error_response("Spot not found", 404)
+
         cursor.execute(
             "UPDATE parking_spots SET status = %s WHERE spot_id = %s",
             (new_status, spot_id)
         )
-        if cursor.rowcount == 0:
-            return error_response("Spot not found", 404)
         conn.commit()
         logger.info(f"Sensor update: spot {spot_id} → {new_status}")
         return jsonify({"spot_id": spot_id, "status": new_status}), 200
@@ -422,16 +410,14 @@ def sensor_update():
     finally:
         if 'cursor' in locals(): cursor.close()
         if 'conn' in locals(): conn.close()
-        
+
 @app.route('/api/history', methods=['GET'])
 def history():
     """Get parking history with pagination"""
     try:
-        # Pagination parameters
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
         
-        # Validate pagination
         if page < 1:
             page = 1
         if per_page < 1 or per_page > 100:
@@ -442,11 +428,9 @@ def history():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Get total count
         cursor.execute("SELECT COUNT(*) as total FROM parking_records")
         total = cursor.fetchone()['total']
 
-        # Get paginated results
         cursor.execute("""
             SELECT * FROM parking_records
             ORDER BY entry_time DESC
@@ -455,7 +439,6 @@ def history():
 
         data = cursor.fetchall()
         
-        # Calculate total pages
         total_pages = (total + per_page - 1) // per_page
 
         logger.info(f"Retrieved history page {page}/{total_pages}")
@@ -482,9 +465,6 @@ def history():
 
 # ==================== MAIN ENTRY POINT ====================
 if __name__ == '__main__':
-    # Initialize database
     init_db()
-    
-    # Start the app
     logger.info("Starting Smart Parking System API...")
     app.run(debug=True, host='0.0.0.0', port=5000)
