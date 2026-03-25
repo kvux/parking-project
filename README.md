@@ -55,14 +55,14 @@ POST /api/sensor/update
 }
 
 ## How to Run
-
 ```bash
 python -m venv venv
 venv\Scripts\activate
-pip install flask mysql-connector-python python-dotenv flask-cors flask-limiter
+pip install flask flask-cors flask-limiter mysql-connector-python python-dotenv requests
+python app.py
+```
 
 ### Sensor loop (Raspberry Pi only) *(new)*
 ```bash
 python module/sensor.py
 ```
-python app.py
