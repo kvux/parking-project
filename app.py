@@ -402,12 +402,13 @@ def sensor_update():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        cursor.execute("SELECT spot_id FROM parking_spots WHERE spot_id = %s", (spot_id,))
+        if not cursor.fetchone():
+            return error_response("Spot not found", 404)
         cursor.execute(
             "UPDATE parking_spots SET status = %s WHERE spot_id = %s",
             (new_status, spot_id)
         )
-        if cursor.rowcount == 0:
-            return error_response("Spot not found", 404)
         conn.commit()
         logger.info(f"Sensor update: spot {spot_id} → {new_status}")
         return jsonify({"spot_id": spot_id, "status": new_status}), 200
