@@ -2,7 +2,6 @@ from datetime import datetime
 import csv
 import os
 import json
-import fcntl
 import logging
 
 LOG_FILE = "logs/entry_exit.csv"
@@ -19,20 +18,20 @@ os.makedirs("logs", exist_ok=True)
 VALID_ACTIONS = {'ENTRY', 'EXIT'}
 
 def _acquire_lock(f):
-    """Acquire file lock (Unix/Linux/Mac)"""
+    """Acquire file lock (fcntl for Unix, no-op for Windows)"""
     try:
+        import fcntl
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-    except (AttributeError, OSError):
-        # Windows fallback - fcntl not available
+    except (ImportError, AttributeError, OSError):
         pass
-
 def _release_lock(f):
     """Release file lock"""
     try:
+        import fcntl
         fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-    except (AttributeError, OSError):
+    except (ImportError, AttributeError, OSError):
         pass
-
+        
 def log_barrier_event(car_plate, action, spot_id=None):
     """
     Log entry/exit events for barrier system with file locking
