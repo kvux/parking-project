@@ -245,15 +245,12 @@ def record_entry():
         )
 
         # Update spot
-        cursor.execute("SELECT spot_id FROM parking_spots WHERE spot_id = %s", (spot_id,))
-        if not cursor.fetchone():
-            return error_response("Spot not found", 404)
+        cursor.execute(
+            "UPDATE parking_spots SET status = 'occupied' WHERE spot_id = %s",
+            (spot_id,)
+        )
 
-cursor.execute(
-    "UPDATE parking_spots SET status = %s WHERE spot_id = %s",
-    (new_status, spot_id)
-)
-conn.commit()
+        conn.commit()
         
         logger.info(f"Car {car_plate} parked at spot {spot_id}")
 
