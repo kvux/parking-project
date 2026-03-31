@@ -9,10 +9,10 @@ db = SQLAlchemy(app)
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    car_number = db.Column(db.String(20), nullable=False)
+    name = db.Column(db.String(80), nullable=False)       # 이름
+    email = db.Column(db.String(120), unique=True, nullable=False)  # 이메일
+    password_hash = db.Column(db.String(255), nullable=False)       # 비밀번호
+    car_number = db.Column(db.String(20), nullable=False)           # 차량 번호
 
     def to_dict(self):
         return {
@@ -22,13 +22,17 @@ class User(db.Model):
             'car_number': self.car_number
         }
 
+# 회원가입
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
+    # 모든 필드가 있는지 확인
     if not all(k in data for k in ['name', 'email', 'password', 'car_number']):
         return jsonify({'error': '모든 필드를 입력해주세요'}), 400
+    # 비밀번호 6자리 이상 확인
     if len(data['password']) < 6:
         return jsonify({'error': '비밀번호는 6자리 이상'}), 400
+    # 이메일 중복 확인
     if User.query.filter_by(email=data['email']).first():
         return jsonify({'error': '이미 존재하는 이메일'}), 400
     
@@ -42,20 +46,24 @@ def register():
     db.session.commit()
     return jsonify(user.to_dict()), 201
 
+# 전체 회원 조회
 @app.route('/users', methods=['GET'])
 def get_users():
     return jsonify([u.to_dict() for u in User.query.all()])
 
+# 회원 1명 조회
 @app.route('/users/<int:id>', methods=['GET'])
 def get_user(id):
     return jsonify(User.query.get_or_404(id).to_dict())
 
+# 회원 삭제
 @app.route('/users/<int:id>', methods=['DELETE'])
 def delete_user(id):
     db.session.delete(User.query.get_or_404(id))
     db.session.commit()
     return '', 204
 
+# 서버 상태 확인
 @app.route('/health')
 def health():
     return jsonify({'status': 'healthy'})
