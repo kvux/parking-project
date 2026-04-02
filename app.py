@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.security import generate_password_hash, check_password_hash
 import mysql.connector
 from mysql.connector import Error
 import os
@@ -69,6 +70,17 @@ def init_db():
                 INDEX idx_active (exit_time)
             )
         """)  
+        
+        # Create users table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(80) NOT NULL,
+                email VARCHAR(120) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                car_number VARCHAR(20) NOT NULL
+            )
+        """)
         
         # Insert default parking spots if table is empty
         cursor.execute("SELECT COUNT(*) FROM parking_spots")
@@ -475,6 +487,91 @@ def history():
             cursor.close()
         if 'conn' in locals():
             conn.close()
+
+# ==================== USER AUTH ====================
+@app.route('/register', methods=['POST'])
+def register():
+    """Register a new user"""
+    data = request.get_json()
+    
+    if not data:
+        return error_response("Invalid JSON")
+    
+    name = data.get('name', '').strip()
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+    car_number = data.get('car_number', '').strip().upper()
+    
+    if not all([name, email, password, car_number]):
+        return error_response("All fields are required")
+    
+    if len(password) < 6:
+        return error_response("Password must be at least 6 characters")
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Check if email exists
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        if cursor.fetchone():
+            return error_response("Email already exists", 409)
+        
+        # Insert user
+        cursor.execute(
+            "INSERT INTO users (name, email, password_hash, car_number) VALUES (%s, %s, %s, %s)",
+            (name, email, generate_password_hash(password), car_number)
+        )
+        conn.commit()
+        
+        logger.info(f"New user registered: {email}")
+        return jsonify({"message": "User registered successfully", "email": email}), 201
+        
+    except Error as e:
+        logger.error(f"Registration error: {e}")
+        return error_response(str(e), 500)
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
+
+@app.route('/login', methods=['POST'])
+def login():
+    """User login"""
+    data = request.get_json()
+    
+    if not data:
+        return error_response("Invalid JSON")
+    
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+    
+    if not email or not password:
+        return error_response("Email and password are required")
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+        user = cursor.fetchone()
+        
+        if not user or not check_password_hash(user['password_hash'], password):
+            return error_response("Invalid email or password", 401)
+        
+        logger.info(f"User logged in: {email}")
+        return jsonify({
+            "id": user['id'],
+            "name": user['name'],
+            "email": user['email'],
+            "car_number": user['car_number']
+        }), 200
+        
+    except Error as e:
+        logger.error(f"Login error: {e}")
+        return error_response(str(e), 500)
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
 
 # ==================== MAIN ENTRY POINT ====================
 if __name__ == '__main__':
