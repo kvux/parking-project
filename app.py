@@ -1,11 +1,14 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
+from flask_jwt_extended import JWTManager, create_access_token
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+app.config['JWT_SECRET_KEY'] = 'your-secret-key-change-this'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+jwt = JWTManager(app)
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -33,7 +36,8 @@ def login():
     if not user or not check_password_hash(user.password_hash, data['password']):
         return jsonify({'error': '이메일 또는 비밀번호가 틀렸습니다'}), 401
     
-    return jsonify(user.to_dict()), 200
+    token = create_access_token(identity=user.id)
+    return jsonify({'token': token, 'user': user.to_dict()}), 200
 
 # 회원가입
 @app.route('/register', methods=['POST'])
