@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_jwt_extended import JWTManager, create_access_token
 from werkzeug.security import generate_password_hash, check_password_hash
 import mysql.connector
 from mysql.connector import Error
@@ -15,6 +16,10 @@ app = Flask(__name__)
 
 # Enable CORS
 CORS(app)
+
+# JWT config
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-this')
+jwt = JWTManager(app)
 
 # rate limit
 limiter = Limiter(
@@ -558,12 +563,16 @@ def login():
         if not user or not check_password_hash(user['password_hash'], password):
             return error_response("Invalid email or password", 401)
         
+        token = create_access_token(identity=user['id'])
         logger.info(f"User logged in: {email}")
         return jsonify({
-            "id": user['id'],
-            "name": user['name'],
-            "email": user['email'],
-            "car_number": user['car_number']
+            "token": token,
+            "user": {
+                "id": user['id'],
+                "name": user['name'],
+                "email": user['email'],
+                "car_number": user['car_number']
+            }
         }), 200
         
     except Error as e:
