@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
@@ -21,6 +21,19 @@ class User(db.Model):
             'email': self.email,
             'car_number': self.car_number
         }
+
+# 로그인
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    if not all(k in data for k in ['email', 'password']):
+        return jsonify({'error': '이메일과 비밀번호를 입력해주세요'}), 400
+    
+    user = User.query.filter_by(email=data['email']).first()
+    if not user or not check_password_hash(user.password_hash, data['password']):
+        return jsonify({'error': '이메일 또는 비밀번호가 틀렸습니다'}), 401
+    
+    return jsonify(user.to_dict()), 200
 
 # 회원가입
 @app.route('/register', methods=['POST'])
