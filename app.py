@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_jwt_extended import JWTManager, create_access_token
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 import mysql.connector
 from mysql.connector import Error
@@ -19,12 +19,13 @@ app = Flask(__name__)
 ALLOWED_ORIGIN = os.getenv("ALLOWED_ORIGIN", "http://localhost:3000")
 CORS(app, origins=[ALLOWED_ORIGIN])
 
-# JWT 구성 / JWT config
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-this')
+# JWT 구성 (실패 시 기본값 없음) / JWT config — no insecure fallback
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', '')
 jwt = JWTManager(app)
 
-# 진입/종료 rate limit / Entry/exit rate limit
-ENTRY_EXIT_LIMIT = "10 per minute"
+# Rate limit 상수 / Rate limit constants
+ENTRY_EXIT_LIMIT = "10 per minute"  # 진입/종료 / Entry/exit
+AUTH_LIMIT = "5 per minute"  # 인증 (엄격) / Auth (tighter)
 
 # 요금 제한 / Rate limiting
 limiter = Limiter(
@@ -48,18 +49,37 @@ db_config = {
     'database': os.getenv('DB_NAME', 'parking_db')
 }
 
+# 컴파일된 정규식 (매 요청마다 컴파일 방지) / Compiled regexes for performance
+_PLATE_RE = re.compile(r'^[A-Z0-9\s\-]+$')
+_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
 
 # 환경 변수 검증 / Environment validation
 def _validate_env():
+    """중요한 시크릿 검증 — 없으면 시작 실패 / Fail fast on missing secrets"""
+    # JWT 시크릿 必须 설정 / JWT_SECRET_KEY must be set
+    jwt_secret = os.getenv('JWT_SECRET_KEY', '')
+    if not jwt_secret or jwt_secret == 'your-secret-key-change-this':
+        raise RuntimeError(
+            'JWT_SECRET_KEY is not set or is still the default placeholder. '
+            'Set a strong random secret in your .env file before running.'
+        )
+
     missing = [k for k in ("DB_USER", "DB_NAME") if not os.getenv(k)]
     if missing:
         logger.warning(
-            "Missing environment variables: %s — falling back to defaults. "
-            "Set these in your .env file for production.",
+            'Missing environment variables: %s — falling back to defaults.',
             ", ".join(missing)
         )
     if not os.getenv("DB_PASSWORD"):
-        logger.warning("DB_PASSWORD is empty. Do NOT run with an empty password in production.")
+        logger.warning("DB_PASSWORD is empty. Do NOT use an empty password in production.")
+
+    # 센서 API 키 없으면 경고 / Warn if sensor key not set
+    sensor_key = os.getenv("SENSOR_API_KEY", "")
+    if not sensor_key:
+        logger.warning(
+            "SENSOR_API_KEY is not set. The /api/sensor/update endpoint is unprotected."
+        )
 
 
 # Raw DB 연결 / Raw DB connection
@@ -136,7 +156,7 @@ def init_db():
 
 # 도우미 함수 / Helper functions
 def error_response(message, code=400):
-    """표준화된 에러 응답 / Standardized error response"""
+    """표준화된 에러 응답 (내부 정보 노출 없음) / Sanitised error response"""
     return jsonify({"error": message}), code
 
 
@@ -144,7 +164,7 @@ def validate_car_plate(plate: str) -> bool:
     """차량 번호 형식 검증 / Validate car plate format"""
     if not plate or not isinstance(plate, str):
         return False
-    return bool(re.match(r'^[A-Z0-9\s-]+$', plate.strip().upper()))
+    return bool(_PLATE_RE.match(plate.strip().upper()))
 
 
 def _parse_car_plate(data: dict):
@@ -171,13 +191,25 @@ def _parse_spot_id(data: dict):
         return None, "spot_id must be an integer"
 
 
+def _check_sensor_key():
+    """
+    센서 API 키 검증 / Verify shared sensor API key on hardware-facing endpoints.
+    X-Sensor-Key 헤더 필요 / Requires X-Sensor-Key header.
+    """
+    expected = os.getenv("SENSOR_API_KEY", "")
+    provided = request.headers.get("X-Sensor-Key", "")
+    if not expected or provided != expected:
+        return False, error_response("Unauthorized", 401)
+    return True, None
+
+
 # API 엔드포인트 / API endpoints
 
 @app.route('/')
 def home():
     return jsonify({
         "message": "Smart Parking System API is running",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "docs": "/api/docs"
     })
 
@@ -187,19 +219,19 @@ def api_documentation():
     """API 문서 엔드포인트 / API documentation endpoint"""
     return jsonify({
         "name": "Smart Parking System API",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "endpoints": {
             "GET /api/spots": "Get all parking spots with their status",
             "GET /api/spots/available": "Get count of available parking spots",
             "POST /api/entry": "Record car entry (requires car_plate and spot_id)",
             "POST /api/exit": "Record car exit (requires car_plate and spot_id)",
-            "GET /api/current": "Get list of currently parked cars",
-            "GET /api/history": "Get parking history (supports pagination)",
-            "POST /api/sensor/update": "Sensor state update (requires spot_id and occupied)",
+            "GET /api/current": "Get list of currently parked cars (JWT required)",
+            "GET /api/history": "Get parking history (JWT required)",
+            "POST /api/sensor/update": "Sensor update (X-Sensor-Key header required)",
             "POST /register": "Register new user",
             "POST /login": "User login",
         },
-        "rate_limits": "200/day · 50/hr (global); 10/min on entry & exit",
+        "rate_limits": "200/day · 50/hr; 10/min entry/exit; 5/min auth",
     })
 
 
@@ -380,8 +412,9 @@ def record_exit():
 
 
 @app.route("/api/current", methods=["GET"])
+@jwt_required()
 def current_cars():
-    """현재 주차된 차량 목록 / Get list of currently parked cars"""
+    """현재 주차된 차량 목록 (JWT 필요) / Get list of currently parked cars"""
     try:
         with get_db() as (_, cursor):
             cursor.execute("""
@@ -401,7 +434,11 @@ def current_cars():
 
 @app.route("/api/sensor/update", methods=["POST"])
 def sensor_update():
-    """센서 상태 업데이트 / Called by sensor.py when a spot's state changes"""
+    """센서 상태 업데이트 (X-Sensor-Key 필요) / Sensor update with API key auth"""
+    ok, err = _check_sensor_key()
+    if not ok:
+        return err
+
     data = request.get_json(silent=True)
     if not data:
         return error_response("Request body must be valid JSON.")
@@ -411,8 +448,8 @@ def sensor_update():
         return error_response(err)
 
     occupied = data.get("occupied")
-    if occupied is None:
-        return error_response("occupied is required")
+    if not isinstance(occupied, bool):
+        return error_response("occupied must be a boolean (true/false).")
 
     new_status = 'occupied' if occupied else 'free'
 
@@ -436,9 +473,9 @@ def sensor_update():
 
 
 @app.route("/api/history", methods=["GET"])
+@jwt_required()
 def history():
-    """주차 이력 조회 (페이지네이션) / Get parking history with pagination"""
-    # 몇 페이지와 어떤 페이지를 표시할 수 있는지 제어합니다 / Control results per page and page number
+    """주차 이력 조회 (JWT 필요) / Get parking history with pagination"""
     page = max(1, request.args.get("page", 1, type=int))
     per_page = request.args.get("per_page", 20, type=int)
     if per_page < 1 or per_page > 100:
@@ -479,31 +516,44 @@ def history():
 # 사용자 인증 / User authentication
 
 @app.route("/register", methods=["POST"])
+@limiter.limit(AUTH_LIMIT)
 def register():
-    """새 사용자 등록 / Register a new user"""
+    """새 사용자 등록 (입력 검증 강화) / Register a new user with enhanced validation"""
     data = request.get_json(silent=True)
     if not data:
-        return error_response("Invalid JSON")
+        return error_response("Invalid JSON.")
 
     name = data.get('name', '').strip()
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
     car_number = data.get('car_number', '').strip().upper()
 
-    # 모든 필드가 있는지 확인 / Verify all fields exist
+    # 모든 필드 확인 / Verify all fields exist
     if not all([name, email, password, car_number]):
-        return error_response("All fields are required")
+        return error_response("All fields are required: name, email, password, car_number.")
 
-    # 비밀번호 6자리 이상 확인 / Check password at least 6 digits
-    if len(password) < 6:
-        return error_response("Password must be at least 6 characters")
+    # 이메일 형식 검증 / Validate email format
+    if not _EMAIL_RE.match(email):
+        return error_response("Invalid email format.")
+
+    # 비밀번호 8자리 이상 (강화) / Password min 8 chars (strengthened)
+    if len(password) < 8:
+        return error_response("Password must be at least 8 characters.")
+
+    # 차량 번호 검증 / Validate car number
+    if not validate_car_plate(car_number):
+        return error_response("Invalid car number format. Use letters, numbers, and hyphens only.")
+
+    # 이름 길이 제한 (DB 열과 일치) / Cap name length to match DB column
+    if len(name) > 80:
+        return error_response("Name must be 80 characters or fewer.")
 
     try:
         with get_db() as (conn, cursor):
             # 이메일 중복 확인 / Check email redundancy
             cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
             if cursor.fetchone():
-                return error_response("Email already exists", 409)
+                return error_response("Email already registered.", 409)
 
             # 사용자 삽입 / Insert user
             cursor.execute(
@@ -513,44 +563,55 @@ def register():
             conn.commit()
 
         logger.info("New user registered: %s", email)
-        return jsonify({"message": "User registered successfully", "email": email}), 201
+        return jsonify({"message": "User registered successfully.", "email": email}), 201
     except Error:
         logger.exception("Registration error.")
         return error_response("Could not register user. Please try again.", 500)
 
 
 @app.route("/login", methods=["POST"])
+@limiter.limit(AUTH_LIMIT)
 def login():
-    """사용자 로그인 / User login"""
+    """사용자 로그인 (타이밍 공격 방지) / User login with timing attack prevention"""
     data = request.get_json(silent=True)
     if not data:
-        return error_response("Invalid JSON")
+        return error_response("Invalid JSON.")
 
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
 
     if not email or not password:
-        return error_response("Email and password are required")
+        return error_response("Email and password are required.")
 
     try:
         with get_db() as (_, cursor):
-            cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+            # 필요한 열만 선택 (SELECT * 금지) / Select only needed columns
+            cursor.execute(
+                "SELECT id, name, email, car_number, password_hash FROM users WHERE email = %s",
+                (email,)
+            )
             user = cursor.fetchone()
 
-            if not user or not check_password_hash(user['password_hash'], password):
-                return error_response("Invalid email or password", 401)
+        # 타이밍 공격 방지: 사용자가 없어도 항상 해시 검증 / Timing attack prevention
+        dummy_hash = generate_password_hash("dummy")
+        pwd_ok = check_password_hash(
+            user["password_hash"] if user else dummy_hash,
+            password
+        )
+        if not user or not pwd_ok:
+            return error_response("Invalid email or password.", 401)
 
-            token = create_access_token(identity=user['id'])
-            logger.info("User logged in: %s", email)
-            return jsonify({
-                "token": token,
-                "user": {
-                    "id": user['id'],
-                    "name": user['name'],
-                    "email": user['email'],
-                    "car_number": user['car_number']
-                }
-            }), 200
+        token = create_access_token(identity=str(user["id"]))
+        logger.info("User logged in: %s", email)
+        return jsonify({
+            "token": token,
+            "user": {
+                "id": user['id'],
+                "name": user['name'],
+                "email": user['email'],
+                "car_number": user['car_number']
+            }
+        }), 200
     except Error:
         logger.exception("Login error.")
         return error_response("Could not log in. Please try again.", 500)
