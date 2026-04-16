@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Smart Parking System 
 
 ## Overview
@@ -95,4 +94,3 @@ POST /register
 **Delete User:** `DELETE /users/<id>`
 
 **Health:** `GET /health`
->>>>>>> origin/signup-api
