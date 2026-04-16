@@ -1,5 +1,7 @@
 # Smart Parking System (스마트 주차 시스템)
 
+[영어](https://github.com/kvux/parking-project/blob/main/README.md)
+
 ## 개요
 주차 자리, 차량 입출차, 주차 이력 관리를 위한 백엔드 API입니다.
 
