@@ -1,5 +1,6 @@
 # Smart Parking System 
 
+[한국어](https://github.com/kvux/parking-project/blob/main/README.ko.md)
 ## Overview
 A backend API for managing parking spots, car entry/exit, and tracking parking history.
 
