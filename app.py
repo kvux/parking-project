@@ -1,5 +1,4 @@
 from flask import Flask, jsonify, request
-<<<<<<< HEAD
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -12,31 +11,31 @@ import re
 import logging
 from datetime import datetime
 
-#configuration
+#configuration #구성
 app = Flask(__name__)
 
-# Enable CORS
+# Enable CORS # CORS 사용
 CORS(app)
 
-# JWT config
+# JWT config # JWT 구성
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-this')
 jwt = JWTManager(app)
 
-# rate limit
+# rate limit # 요금 제한
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"]
 )
 
-# logging setup
+# logging setup # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# db config using env
+# db config using env # env를 사용한 DB 구성
 db_config = {
     'host': os.getenv('DB_HOST', 'localhost'),
     'user': os.getenv('DB_USER', 'root'),
@@ -44,7 +43,7 @@ db_config = {
     'database': os.getenv('DB_NAME', 'parking_db')
 }
 
-# db func
+# db func # DB 기능
 def get_db_connection():
     """Create and return a database connection"""
     return mysql.connector.connect(**db_config)
@@ -55,7 +54,7 @@ def init_db():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # create parking spot table
+        # create parking spot table # 주차 공간 테이블 만들기
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS parking_spots (
                 spot_id INT PRIMARY KEY,
@@ -63,7 +62,7 @@ def init_db():
             )
          """)
         
-        # Create parking_records table
+        # create parking_records table # 주차_기록 테이블 만들기
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS parking_records (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -77,7 +76,7 @@ def init_db():
             )
         """)  
         
-        # Create users table
+        # Create users table # 사용자 테이블 생성
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -88,12 +87,12 @@ def init_db():
             )
         """)
         
-        # Insert default parking spots if table is empty
+        # insert default parking spots if table is empty # 테이블이 비어 있는 경우 기본 주차 공간 삽입
         cursor.execute("SELECT COUNT(*) FROM parking_spots")
         count = cursor.fetchone()[0]
         
         if count == 0:
-            for i in range(1, 51):  # Create 50 parking spots
+            for i in range(1, 51):  # Create 50 parking spots # 50대의 주차 공간 만들기
                 cursor.execute("INSERT INTO parking_spots (spot_id) VALUES (%s)", (i,))
             logger.info(f"Created {50} default parking spots")
         
@@ -108,7 +107,7 @@ def init_db():
         if 'conn' in locals():
             conn.close()
 
-#helper function
+#helper function #도우미 함수
 def error_response(message, code=400):
     """Return standardized error response"""
     return jsonify({"error": message}), code
@@ -117,7 +116,7 @@ def validate_car_plate(car_plate):
     """Validate car plate format"""
     if not car_plate or not isinstance(car_plate, str):
         return False
-    # Allow letters, numbers, hyphens, and spaces (adjust regex as needed)
+    # allow letters, numbers, hyphens, and spaces  # 문자, 숫자, 하이픈, 공백 허용
     return bool(re.match(r'^[A-Z0-9\s-]+$', car_plate.strip().upper()))
 
 #api end points
@@ -183,7 +182,7 @@ def get_available_spots():
         cursor.execute("SELECT COUNT(*) FROM parking_spots WHERE status = 'free'")
         count = cursor.fetchone()[0]
         
-        # get total spot
+        # get total spot # 총점 획득
         cursor.execute("SELECT COUNT(*) FROM parking_spots")
         total = cursor.fetchone()[0]
         
@@ -206,26 +205,26 @@ def get_available_spots():
             conn.close()
 
 @app.route('/api/entry', methods=['POST'])
-@limiter.limit("10 per minute")  # rate limit for entry point
-def record_entry():
+@limiter.limit("10 per minute")  # rate limit for entry point # 진입 지점의 요금 제한
+def record_entry(): 
     """Record a car entering the parking lot"""
     data = request.get_json()
 
     if not data:
         return error_response("Invalid JSON input")
 
-    # Sanitize inputs
+    # sanitize inputs # 입력 소독
     car_plate = data.get('car_plate', '').strip().upper()
     spot_id = data.get('spot_id')
 
-    # Validate inputs
+    # validate inputs # 입력 검증
     if not car_plate or not spot_id:
         return error_response("car_plate and spot_id are required")
     
     if not validate_car_plate(car_plate):
         return error_response("Invalid car plate format. Use letters, numbers, and hyphens only.")
     
-    # Validate spot_id is an integer
+    # validate spot_id is an integer  # spot_id가 정수인지 확인합니다
     try:
         spot_id = int(spot_id)
     except (ValueError, TypeError):
@@ -235,7 +234,7 @@ def record_entry():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Check if car already parked
+        # check if car already parked # 이미 주차되어 있는지 확인합니다
         cursor.execute("""
             SELECT * FROM parking_records
             WHERE car_plate = %s AND exit_time IS NULL
@@ -246,7 +245,7 @@ def record_entry():
             logger.warning(f"Car {car_plate} attempted to park while already parked")
             return error_response("Car is already parked")
 
-        # Check if spot exists and is free
+        # check if spot exists and is free # 자리가 있고 비어 있는지 확인합니다
         cursor.execute("SELECT status FROM parking_spots WHERE spot_id = %s", (spot_id,))
         spot = cursor.fetchone()
 
@@ -256,13 +255,13 @@ def record_entry():
         if spot['status'] != 'free':
             return error_response("Spot already occupied")
 
-        # Insert record
+        # insert record # 레코드 삽입
         cursor.execute(
             "INSERT INTO parking_records (car_plate, entry_time, spot_id) VALUES (%s, NOW(), %s)",
             (car_plate, spot_id)
         )
 
-        # Update spot
+        # update spot # 업데이트 지점
         cursor.execute(
             "UPDATE parking_spots SET status = 'occupied' WHERE spot_id = %s",
             (spot_id,)
@@ -288,7 +287,7 @@ def record_entry():
             conn.close()
 
 @app.route('/api/exit', methods=['POST'])
-@limiter.limit("10 per minute")  # Rate limiting for exit endpoint
+@limiter.limit("10 per minute")  # rate limiting for exit endpoint # 종료 엔드포인트에 대한 요금 제한
 def record_exit():
     """Record a car exiting the parking lot"""
     data = request.get_json()
@@ -296,14 +295,14 @@ def record_exit():
     if not data:
         return error_response("Invalid JSON input")
 
-    # Sanitize inputs
+   # clean and validate input # 입력 및 검증
     car_plate = data.get('car_plate', '').strip().upper()
     spot_id = data.get('spot_id')
 
     if not car_plate or not spot_id:
         return error_response("car_plate and spot_id are required")
 
-    # Validate spot_id is an integer
+    # validate spot_id is an integer # spot_id가 정수인지 확인합니다
     try:
         spot_id = int(spot_id)
     except (ValueError, TypeError):
@@ -313,7 +312,7 @@ def record_exit():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Check active record
+        # check active record # 활성 기록 확인
         cursor.execute("""
             SELECT * FROM parking_records
             WHERE car_plate = %s AND spot_id = %s AND exit_time IS NULL
@@ -325,14 +324,14 @@ def record_exit():
             logger.warning(f"Exit attempted for car {car_plate} with no active record")
             return error_response("No active parking record found")
 
-        # Update exit
+        # update exit # 종료 업데이트 종료하다
         cursor.execute("""
             UPDATE parking_records
             SET exit_time = NOW()
             WHERE id = %s
         """, (record['id'],))
 
-        # Free spot
+        # free spot # 무료 장소
         cursor.execute(
             "UPDATE parking_spots SET status = 'free' WHERE spot_id = %s",
             (spot_id,)
@@ -340,7 +339,7 @@ def record_exit():
 
         conn.commit()
         
-        # Calculate parking duration
+        # calculate parking duration # 주차 시간 계산
         entry_time = record['entry_time']
         exit_time = datetime.now()
         duration = exit_time - entry_time
@@ -441,11 +440,11 @@ def sensor_update():
 def history():
     """Get parking history with pagination"""
     try:
-        # Pagination parameters
+       #control how many results show up and which page you view # 몇 페이지와 어떤 페이지를 표시할 수 있는지 제어합니다.
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
         
-        # Validate pagination
+        #make sure page and limit values are valid #페이지 및 제한 값이 유효한지 확인합니다
         if page < 1:
             page = 1
         if per_page < 1 or per_page > 100:
@@ -456,11 +455,11 @@ def history():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Get total count
+        # get total count # 총 개수 가져오기
         cursor.execute("SELECT COUNT(*) as total FROM parking_records")
         total = cursor.fetchone()['total']
 
-        # Get paginated results
+      #get results for the current page #현재 페이지의 결과 가져오기
         cursor.execute("""
             SELECT * FROM parking_records
             ORDER BY entry_time DESC
@@ -469,7 +468,7 @@ def history():
 
         data = cursor.fetchall()
         
-        # Calculate total pages
+        # calculate total page # 총 페이지 계산
         total_pages = (total + per_page - 1) // per_page
 
         logger.info(f"Retrieved history page {page}/{total_pages}")
@@ -494,7 +493,7 @@ def history():
         if 'conn' in locals():
             conn.close()
 
-# ==================== USER AUTH ====================
+#USER AUTH #사용자 인증
 @app.route('/register', methods=['POST'])
 def register():
     """Register a new user"""
@@ -518,12 +517,12 @@ def register():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # Check if email exists
+        # check if email exists # 이메일이 있는지 확인하기
         cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
         if cursor.fetchone():
             return error_response("Email already exists", 409)
         
-        # Insert user
+        # insert user # 사용자 삽입
         cursor.execute(
             "INSERT INTO users (name, email, password_hash, car_number) VALUES (%s, %s, %s, %s)",
             (name, email, generate_password_hash(password), car_number)
@@ -583,12 +582,12 @@ def login():
         if 'cursor' in locals(): cursor.close()
         if 'conn' in locals(): conn.close()
 
-# ==================== MAIN ENTRY POINT ====================
+#MAIN ENTRY POINT #주요 진입 지점
 if __name__ == '__main__':
-    # Initialize database
+    #initialize database # 데이터베이스 초기화
     init_db()
     
-    # Start the app
+    #start the app # 앱을 시작하다
     logger.info("Starting Smart Parking System API...")
     app.run(debug=True, host='0.0.0.0', port=5000)
 =======
@@ -618,7 +617,7 @@ class User(db.Model):
             'car_number': self.car_number
         }
 
-# 로그인
+#login # 로그인
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -632,17 +631,17 @@ def login():
     token = create_access_token(identity=user.id)
     return jsonify({'token': token, 'user': user.to_dict()}), 200
 
-# 회원가입
+# membership registration # 회원가입
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
-    # 모든 필드가 있는지 확인
+   # verify that all fields exist # 모든 필드가 있는지 확인
     if not all(k in data for k in ['name', 'email', 'password', 'car_number']):
         return jsonify({'error': '모든 필드를 입력해주세요'}), 400
-    # 비밀번호 6자리 이상 확인
+   # check password at least 6 digits # 비밀번호 6자리 이상 확인
     if len(data['password']) < 6:
         return jsonify({'error': '비밀번호는 6자리 이상'}), 400
-    # 이메일 중복 확인
+  # check Email Redundancy  # 이메일 중복 확인
     if User.query.filter_by(email=data['email']).first():
         return jsonify({'error': '이미 존재하는 이메일'}), 400
     
@@ -656,24 +655,24 @@ def register():
     db.session.commit()
     return jsonify(user.to_dict()), 201
 
-# 전체 회원 조회
+# entire membership inquiry # 전체 회원 조회
 @app.route('/users', methods=['GET'])
 def get_users():
     return jsonify([u.to_dict() for u in User.query.all()])
 
-# 회원 1명 조회
+# check 1 member # 회원 1명 조회
 @app.route('/users/<int:id>', methods=['GET'])
 def get_user(id):
     return jsonify(User.query.get_or_404(id).to_dict())
 
-# 회원 삭제
+# Delete membership # 회원 삭제
 @app.route('/users/<int:id>', methods=['DELETE'])
 def delete_user(id):
     db.session.delete(User.query.get_or_404(id))
     db.session.commit()
     return '', 204
 
-# 서버 상태 확인
+# checking the status of the server# 서버 상태 확인
 @app.route('/health')
 def health():
     return jsonify({'status': 'healthy'})
