@@ -8,12 +8,18 @@ import mysql.connector
 from mysql.connector import Error
 import os
 import re
+import sys
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Add module path for imports
+sys.path.append(os.path.join(os.path.dirname(__file__), 'module'))
+from fee_calculator import calculate_fee
+from reservations import init_reservation_table
 
 #configuration #구성
 app = Flask(__name__)
@@ -152,6 +158,13 @@ def init_db():
             conn.commit()
             logger.info("Database initialised successfully.")
 
+            # 예약 테이블 초기화 / Initialize reservations table
+            init_reservation_table()
+
+    except Error as e:
+        logger.error("Database initialisation error: %s", e)
+        raise
+
     except Error as e:
         logger.error("Database initialisation error: %s", e)
         raise
@@ -222,15 +235,21 @@ def api_documentation():
     """API 문서 엔드포인트 / API documentation endpoint"""
     return jsonify({
         "name": "Smart Parking System API",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "endpoints": {
             "GET /api/spots": "Get all parking spots with their status",
             "GET /api/spots/available": "Get count of available parking spots",
             "POST /api/entry": "Record car entry (requires car_plate and spot_id)",
-            "POST /api/exit": "Record car exit (requires car_plate and spot_id)",
+            "POST /api/exit": "Record car exit (returns fee details)",
             "GET /api/current": "Get list of currently parked cars (JWT required)",
             "GET /api/history": "Get parking history (JWT required)",
             "POST /api/sensor/update": "Sensor update (X-Sensor-Key header required)",
+            "POST /api/calculate-fee": "Preview parking fee (request: entry_time, exit_time, discount_percent)",
+            "POST /api/reservations": "Create reservation (JWT required)",
+            "GET /api/reservations": "List my reservations (JWT required)",
+            "POST /api/reservations/<id>/checkin": "Check in with reservation (JWT required)",
+            "POST /api/reservations/<id>/cancel": "Cancel reservation (JWT required)",
+            "GET /api/reservations/verify/<code>": "Verify reservation by code (for gate)",
             "POST /register": "Register new user",
             "POST /login": "User login",
         },
@@ -402,11 +421,16 @@ def record_exit():
         exit_time = datetime.now(timezone.utc)
         hours = round((exit_time - entry_time).total_seconds() / 3600, 2)
 
-        logger.info("Car %s exited spot %d after %.2f hours.", car_plate, spot_id, hours)
+        # 요금 계산 / Calculate fee
+        fee_details = calculate_fee(entry_time, exit_time)
+
+        logger.info("Car %s exited spot %d after %.2f hours. Fee: %.2f KRW.", car_plate, spot_id, hours, fee_details["fee"])
         return jsonify({
             "message": f"Car {car_plate} exited from spot {spot_id}.",
             "parking_duration_hours": hours,
             "exit_time": exit_time.isoformat(),
+            "fee": fee_details["fee"],
+            "fee_breakdown": fee_details
         }), 200
 
     except Error:
@@ -618,6 +642,139 @@ def login():
     except Error:
         logger.exception("Login error.")
         return error_response("Could not log in. Please try again.", 500)
+
+
+# 요금 미리 계산 / Fee preview endpoint
+@app.route("/api/calculate-fee", methods=["POST"])
+def calculate_fee_preview():
+    """요금 미리 계산 (Android 앱용) / Calculate fee without recording exit"""
+    data = request.get_json(silent=True)
+    if not data:
+        return error_response("Invalid JSON.")
+
+    try:
+        from datetime import datetime
+        entry_str = data.get("entry_time")
+        exit_str = data.get("exit_time")
+        discount = data.get("discount_percent", 0)
+
+        if not entry_str or not exit_str:
+            return error_response("entry_time and exit_time are required.")
+
+        entry_time = datetime.fromisoformat(entry_str)
+        exit_time = datetime.fromisoformat(exit_str)
+
+        fee_details = calculate_fee(entry_time, exit_time, discount)
+        return jsonify(fee_details), 200
+    except ValueError as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response("Could not calculate fee.", 500)
+
+
+# 예약 API 엔드포인트 / Reservation API endpoints
+@app.route("/api/reservations", methods=["POST"])
+@jwt_required()
+def create_reservation_api():
+    """예약 생성 / Create a reservation"""
+    from reservations import create_reservation
+    data = request.get_json(silent=True)
+    if not data:
+        return error_response("Invalid JSON.")
+
+    user_id = get_jwt_identity()
+    start_time_str = data.get("start_time")
+    end_time_str = data.get("end_time")
+    spot_id = data.get("spot_id")  # Optional
+
+    if not start_time_str or not end_time_str:
+        return error_response("start_time and end_time are required.")
+
+    try:
+        from datetime import datetime
+        start_time = datetime.fromisoformat(start_time_str)
+        end_time = datetime.fromisoformat(end_time_str)
+    except ValueError:
+        return error_response("Invalid datetime format. Use ISO format (YYYY-MM-DDTHH:MM:SS).")
+
+    if spot_id is not None:
+        try:
+            spot_id = int(spot_id)
+        except ValueError:
+            return error_response("spot_id must be an integer")
+
+    result = create_reservation(user_id, start_time, end_time, spot_id)
+    if "error" in result:
+        return error_response(result["error"], 400)
+    return jsonify(result), 201
+
+
+@app.route("/api/reservations", methods=["GET"])
+@jwt_required()
+def list_reservations():
+    """내 예약 목록 / List my reservations"""
+    from reservations import get_user_reservations
+    user_id = get_jwt_identity()
+    result = get_user_reservations(user_id)
+    if isinstance(result, dict) and "error" in result:
+        return error_response(result["error"], 500)
+    return jsonify({"reservations": result}), 200
+
+
+@app.route("/api/reservations/<int:res_id>/checkin", methods=["POST"])
+@jwt_required()
+def checkin_reservation_api(res_id):
+    """예약으로 체크인 / Check in using reservation"""
+    from reservations import checkin_reservation
+    data = request.get_json(silent=True)
+    car_plate = data.get("car_plate") if data else None
+
+    if not car_plate:
+        return error_response("car_plate is required.")
+
+    result = checkin_reservation(res_id, car_plate)
+    if "error" in result:
+        return error_response(result["error"], 400)
+    return jsonify(result), 200
+
+
+@app.route("/api/reservations/<int:res_id>/cancel", methods=["POST"])
+@jwt_required()
+def cancel_reservation_api(res_id):
+    """예약 취소 / Cancel reservation"""
+    from reservations import cancel_reservation
+    user_id = get_jwt_identity()
+    result = cancel_reservation(res_id, user_id)
+    if "error" in result:
+        return error_response(result["error"], 400)
+    return jsonify(result), 200
+
+
+@app.route("/api/reservations/verify/<code>", methods=["GET"])
+def verify_reservation(code):
+    """예약 코드 확인 / Verify reservation by code (for gate check-in)"""
+    try:
+        conn = mysql.connector.connect(
+            host=os.getenv('DB_HOST', 'localhost'),
+            user=os.getenv('DB_USER', 'root'),
+            password=os.getenv('DB_PASSWORD', ''),
+            database=os.getenv('DB_NAME', 'parking_db')
+        )
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT r.*, u.name, u.car_number FROM reservations r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.reservation_code = %s AND r.status = 'pending'
+        """, (code,))
+        res = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not res:
+            return error_response("Invalid or expired reservation code", 404)
+        return jsonify(res), 200
+    except Error as e:
+        return error_response(str(e), 500)
 
 
 # 주요 진입 지점 / Main entry point
