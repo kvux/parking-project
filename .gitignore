@@ -7,8 +7,8 @@ __pycache__/
 .vscode/
 .idea/
 
-# Environment variables
-.env
+# Environment variables (uncomment next line for production)
+#.env
 
 # Database (if you have local DB files)
 *.db
