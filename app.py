@@ -11,6 +11,9 @@ import re
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from dotenv import load_dotenv
+
+load_dotenv()
 
 #configuration #구성
 app = Flask(__name__)
