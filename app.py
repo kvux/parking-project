@@ -165,10 +165,6 @@ def init_db():
         logger.error("Database initialisation error: %s", e)
         raise
 
-    except Error as e:
-        logger.error("Database initialisation error: %s", e)
-        raise
-
 
 # 도우미 함수 / Helper functions
 def error_response(message, code=400):
@@ -225,7 +221,7 @@ def _check_sensor_key():
 def home():
     return jsonify({
         "message": "Smart Parking System API is running",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "docs": "/api/docs"
     })
 
@@ -416,9 +412,7 @@ def record_exit():
 
         # 주차 시간 계산 / Calculate parking duration
         entry_time = record["entry_time"]
-        if entry_time.tzinfo is None:
-            entry_time = entry_time.replace(tzinfo=timezone.utc)
-        exit_time = datetime.now(timezone.utc)
+        exit_time = datetime.now()
         hours = round((exit_time - entry_time).total_seconds() / 3600, 2)
 
         # 요금 계산 / Calculate fee
@@ -732,7 +726,22 @@ def checkin_reservation_api(res_id):
     if not car_plate:
         return error_response("car_plate is required.")
 
-    result = checkin_reservation(res_id, car_plate)
+    # reservation_code를 ID로 조회 후 코드로 체크인 / Look up code by ID
+    try:
+        with get_db() as (_, cursor):
+            cursor.execute(
+                "SELECT reservation_code FROM reservations WHERE id = %s AND status = 'pending'",
+                (res_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return error_response("Reservation not found or not pending.")
+            code = row["reservation_code"]
+    except Error:
+        logger.exception("Error looking up reservation code.")
+        return error_response("Could not verify reservation.", 500)
+
+    result = checkin_reservation(code, car_plate)
     if "error" in result:
         return error_response(result["error"], 400)
     return jsonify(result), 200
