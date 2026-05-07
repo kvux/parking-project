@@ -763,21 +763,13 @@ def cancel_reservation_api(res_id):
 def verify_reservation(code):
     """예약 코드 확인 / Verify reservation by code (for gate check-in)"""
     try:
-        conn = mysql.connector.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
-            user=os.getenv('DB_USER', 'root'),
-            password=os.getenv('DB_PASSWORD', ''),
-            database=os.getenv('DB_NAME', 'parking_db')
-        )
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT r.*, u.name, u.car_number FROM reservations r
-            JOIN users u ON r.user_id = u.id
-            WHERE r.reservation_code = %s AND r.status = 'pending'
-        """, (code,))
-        res = cursor.fetchone()
-        cursor.close()
-        conn.close()
+        with get_db() as (_, cursor):
+            cursor.execute("""
+                SELECT r.*, u.name, u.car_number FROM reservations r
+                JOIN users u ON r.user_id = u.id
+                WHERE r.reservation_code = %s AND r.status = 'pending'
+            """, (code,))
+            res = cursor.fetchone()
 
         if not res:
             return error_response("Invalid or expired reservation code", 404)
