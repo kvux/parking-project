@@ -15,7 +15,7 @@ A backend API for managing parking spots, car entry/exit, fee calculation, and r
 - Automatic LED indicators per spot
 - User registration and login (JWT)
 - **Reservation system** (book spots for specific time slots)
-- **Automatic fee calculation** (10,000 KRW/hour, 5-min grace period)
+- **Automatic fee calculation** \
 - Barrier event logging (CSV + JSON)
 
 ## Tech Stack
