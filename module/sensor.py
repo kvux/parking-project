@@ -90,9 +90,14 @@ def set_led(spot_id, is_occupied):
 def notify_api(spot_id, is_occupied):
     """Tell the Flask server about a status change."""
     try:
+        # Load sensor key from environment like the server does
+        import os
+        SENSOR_KEY = os.getenv("SENSOR_API_KEY", "")
+        
         resp = requests.post(
             f"{API_BASE_URL}/api/sensor/update",
             json={"spot_id": spot_id, "occupied": is_occupied},
+            headers={"X-Sensor-Key": SENSOR_KEY},
             timeout=3
         )
         if resp.status_code == 200:

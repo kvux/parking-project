@@ -782,8 +782,9 @@ def verify_reservation(code):
         if not res:
             return error_response("Invalid or expired reservation code", 404)
         return jsonify(res), 200
-    except Error as e:
-        return error_response(str(e), 500)
+    except Error:
+        logger.exception("Error verifying reservation.")
+        return error_response("Could not verify reservation.", 500)
 
 
 # 주요 진입 지점 / Main entry point
