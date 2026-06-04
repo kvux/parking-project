@@ -1,4 +1,3 @@
-```markdown
 # 스마트 주차 시스템
 
 [English](https://github.com/kvux/parking-project/blob/main/README.md)
@@ -27,15 +26,8 @@
 - Android 앱 *(개발 중)*
 
 ## 모듈 구조
-```
-app.py                    # 메인 Flask API 서버
-module/
-  sensor.py               # Pi 센서 루프 (HC-SR04, LED 제어)
-  led_controller.py       # LED 제어 유틸리티
-  fee_calculator.py       # 주차 요금 계산
-  exit_entry.py           # 차단기 이벤트 로깅
-  reservations.py         # 예약 시스템 로직
-```
+app.py # 메인 Flask API 서버 module/ sensor.py # Pi 센서 루프 (HC-SR04, LED 제어) led_controller.py # LED 제어 유틸리티 fee_calculator.py # 주차 요금 계산 exit_entry.py # 차단기 이벤트 로깅 reservations.py # 예약 시스템 로직
+
 
 ## API 엔드포인트
 
@@ -96,17 +88,12 @@ python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 python app.py
-```
-
-### 센서 루프 (Raspberry Pi 전용)
-```bash
+센서 루프 (Raspberry Pi 전용)
 python module/sensor.py
-```
+환경 변수
+.env.example을 .env로 복사 후 입력:
 
-## 환경 변수
-`.env.example`을 `.env`로 복사 후 입력:
-- `JWT_SECRET_KEY` (필수) — 생성: `python -c "import secrets; print(secrets.token_hex(32))"`
-- `SENSOR_API_KEY` (필수) — 생성: `python -c "import secrets; print(secrets.token_hex(16))"`
-- `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
-- `ALLOWED_ORIGIN` (Android 앱 CORS origin)
-```
+JWT_SECRET_KEY (필수) — 생성: python -c "import secrets; print(secrets.token_hex(32))"
+SENSOR_API_KEY (필수) — 생성: python -c "import secrets; print(secrets.token_hex(16))"
+DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+ALLOWED_ORIGIN (Android 앱 CORS origin)
