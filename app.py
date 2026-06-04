@@ -20,6 +20,7 @@ load_dotenv()
 sys.path.append(os.path.join(os.path.dirname(__file__), 'module'))
 from fee_calculator import calculate_fee
 from reservations import init_reservation_table
+from exit_entry import log_barrier_event
 
 #configuration #구성
 app = Flask(__name__)
