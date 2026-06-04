@@ -49,6 +49,7 @@ def calculate_fee(entry_time, exit_time=None, discount_percent=0):
     if hours_actual <= (GRACE_PERIOD_MINUTES / 60):
         billable_hours = 0
         fee = 0
+        discount_amount = 0
         logger.info(f"Grace period applied - parking duration: {hours_actual:.2f} hours")
     else:
         # Round up to nearest hour (minimum 1 hour charge)
