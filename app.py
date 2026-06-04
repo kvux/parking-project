@@ -351,7 +351,7 @@ def record_entry():
                 (spot_id,)
             )
             conn.commit()
-
+        log_barrier_event(car_plate, "ENTRY", spot_id)
         logger.info("Car %s parked at spot %d.", car_plate, spot_id)
         return jsonify({
             "message": f"Car {car_plate} parked at spot {spot_id}.",
@@ -410,7 +410,8 @@ def record_exit():
                 (spot_id,)
             )
             conn.commit()
-
+        log_barrier_event(car_plate, "ENTRY", spot_id)
+        
         # 주차 시간 계산 / Calculate parking duration
         entry_time = record["entry_time"]
         exit_time = datetime.now()
