@@ -83,12 +83,6 @@ app.py # 메인 Flask API 서버 module/ sensor.py # Pi 센서 루프 (HC-SR04, 
 - 자동 배정: 해당 시간대에 사용 가능한 첫 번째 공간 배정
 
 ## 실행 방법
-```bash
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-python app.py
-센서 루프 (Raspberry Pi 전용)
 python module/sensor.py
 환경 변수
 .env.example을 .env로 복사 후 입력:
